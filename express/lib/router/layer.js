@@ -30,6 +30,7 @@ var hasOwnProperty = Object.prototype.hasOwnProperty;
 
 module.exports = Layer;
 
+// Layer 构造函数
 function Layer(path, options, fn) {
   if (!(this instanceof Layer)) {
     return new Layer(path, options, fn);
@@ -38,6 +39,7 @@ function Layer(path, options, fn) {
   debug('new %o', path)
   var opts = options || {};
 
+  // 将 new Layer 传进来的中间件函数 fn 挂载到 Layer.handle
   this.handle = fn;
   this.name = fn.name || '<anonymous>';
   this.params = undefined;

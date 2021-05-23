@@ -40,23 +40,29 @@ var toString = Object.prototype.toString;
  * @public
  */
 
+// 这个实际上就是 new Router 的 Router
 var proto = module.exports = function(options) {
   var opts = options || {};
 
+  // 定义 router 函数对象
   function router(req, res, next) {
     router.handle(req, res, next);
   }
 
   // mixin Router class functions
+  // 往 router 实例上混入一系列方法，这些方法定义在 proto 上
   setPrototypeOf(router, proto)
 
+  // 继续往 router 函数对象上挂载一些其他属性
   router.params = {};
   router._params = [];
   router.caseSensitive = opts.caseSensitive;
   router.mergeParams = opts.mergeParams;
   router.strict = opts.strict;
+  // 定义 stack 用于存储中间件
   router.stack = [];
 
+  // 返回 router，在 new Router 后得到的就是这个 router 函数
   return router;
 };
 
@@ -132,8 +138,9 @@ proto.param = function param(name, fn) {
  * Dispatch a req, res into the router.
  * @private
  */
-
+// 定义 router.handle
 proto.handle = function handle(req, res, out) {
+  // 将 router 实例保存在 self 上
   var self = this;
 
   debug('dispatching %s %s', req.method, req.url);
@@ -149,6 +156,8 @@ proto.handle = function handle(req, res, out) {
   var options = [];
 
   // middleware and routes
+  // 拿到 router 中存放 layer 实例的数组
+  // layer 中存放了中间件函数
   var stack = self.stack;
 
   // manage inter-router variables
@@ -171,8 +180,10 @@ proto.handle = function handle(req, res, out) {
   req.baseUrl = parentUrl;
   req.originalUrl = req.originalUrl || req.url;
 
+  // 执行 next 函数，也就死说，执行 router.handle 的时候，会自动调用 next
   next();
 
+  // 定义了 next 函数
   function next(err) {
     var layerError = err === 'route'
       ? null
@@ -424,36 +435,52 @@ proto.process_params = function process_params(layer, called, req, res, done) {
  *
  * @public
  */
-
+// router.use 是在这里定义的
+// 这里需要注意的是 this 指向的问题，如果是执行 router.use，那么此时 this 指向的是 router
+// router.use 的使用形式
+//  1、router.use((req, res, next) => {}) // 只传了中间件函数
+//  2、router.use('/', (req, res, next) => {}) // 传了路径和中间件函数
+//  3、router.use('/', (req, res, next) => {}, (req, res, next) => {}, ...) // 连续注册多个中间件
 proto.use = function use(fn) {
-  var offset = 0;
-  var path = '/';
+  var offset = 0; // 偏移量
+  var path = '/'; // 路径
 
   // default path to '/'
   // disambiguate router.use([fn])
+  // 如果 fn 不是函数形式，那么就是 router.use('/', (req, res, next) => {})
   if (typeof fn !== 'function') {
+    // 将第一位参数给 arg
     var arg = fn;
 
+    // 如果是数组，取出第一位
     while (Array.isArray(arg) && arg.length !== 0) {
       arg = arg[0];
     }
 
     // first arg is the path
     if (typeof arg !== 'function') {
-      offset = 1;
-      path = fn;
+      offset = 1; // offset 偏移量赋值为 1
+      path = fn; // 将路径赋值给 path
     }
   }
 
+  // 将参数 arguments 从 offset 偏移量后开始切割得到中间件函数数组
+  //  offset：如果第一位参数传的是路径，那么 offset=1，代表 arguments 从 1 之后的才是中间件函数
+  //          否则，offset=0
+  // flatten 的作用是扁平化数组
+  // router.use('/', (req, res, next) => {}, (req, res, next) => {}, ...)
   var callbacks = flatten(slice.call(arguments, offset));
 
+  // callbacks 长度为 0，说明没有传入中间件函数，报错
   if (callbacks.length === 0) {
     throw new TypeError('Router.use() requires a middleware function')
   }
 
+  // 遍历中间件函数数组
   for (var i = 0; i < callbacks.length; i++) {
     var fn = callbacks[i];
 
+    // 中间件不是函数形式，报错
     if (typeof fn !== 'function') {
       throw new TypeError('Router.use() requires a middleware function but got a ' + gettype(fn))
     }
@@ -461,17 +488,24 @@ proto.use = function use(fn) {
     // add the middleware
     debug('use %o %s', path, fn.name || '<anonymous>')
 
+    // 实例化 Layer，并将 路径、中间件函数fn 以及一些其他参数传进去
+    // new Layer 时会将 中间件函数fn 挂载到实例 layer.handle 上
     var layer = new Layer(path, {
       sensitive: this.caseSensitive,
       strict: false,
       end: false
     }, fn);
 
+    // 设置 
     layer.route = undefined;
 
+    // 这里的 this 实际上是 router
+    // 就是将 layer 实例存到 router.stack 数组
+    // 当后面需要使用到中间件函数时，同 router 中逐一取出 layer 实例，执行实例的 handle
     this.stack.push(layer);
   }
 
+  // 将 router 返回，用于链式调用
   return this;
 };
 

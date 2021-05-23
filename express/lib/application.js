@@ -135,7 +135,9 @@ app.defaultConfiguration = function defaultConfiguration() {
  * @private
  */
 app.lazyrouter = function lazyrouter() {
+  // 如果 app 上没有 _router
   if (!this._router) {
+    // 创建一个 Router 实例挂载到 app 上
     this._router = new Router({
       caseSensitive: this.enabled('case sensitive routing'),
       strict: this.enabled('strict routing')
@@ -154,8 +156,9 @@ app.lazyrouter = function lazyrouter() {
  *
  * @private
  */
-
+// 外部访问服务，触发 app 函数调用，app 函数实际是调用 app.handle
 app.handle = function handle(req, res, callback) {
+  // 取到 router 实例
   var router = this._router;
 
   // final handler
@@ -171,6 +174,7 @@ app.handle = function handle(req, res, callback) {
     return;
   }
 
+  // app.handle 实际上是调用的 router.handle 方法
   router.handle(req, res, done);
 };
 
@@ -183,39 +187,57 @@ app.handle = function handle(req, res, callback) {
  *
  * @public
  */
-
+// app.use 的使用形式
+//  1、app.use((req, res, next) => {}) // 只传了中间件函数
+//  2、app.use('/', (req, res, next) => {}) // 传了路径和中间件函数
+//  3、app.use('/', (req, res, next) => {}, (req, res, next) => {}, ...) // 连续注册多个中间件
 app.use = function use(fn) {
-  var offset = 0;
-  var path = '/';
+  var offset = 0; // 定义偏移量
+  var path = '/'; // 定义路径，默认为 '/'
 
   // default path to '/'
   // disambiguate app.use([fn])
+  // fn 代表使用 app.use 传进来的第一位参数
+  // 如果 fn 不是函数形式，那么就是 app.use('/', (req, res, next) => {})
   if (typeof fn !== 'function') {
+    // 将第一位参数给 arg
     var arg = fn;
 
+    // 如果是数组，取出第一位
     while (Array.isArray(arg) && arg.length !== 0) {
       arg = arg[0];
     }
 
     // first arg is the path
     if (typeof arg !== 'function') {
-      offset = 1;
-      path = fn;
+      offset = 1; // offset 偏移量赋值为 1
+      path = fn; // 将路径赋值给 path
     }
   }
 
+  // 将参数 arguments 从 offset 偏移量后开始切割得到中间件函数数组
+  //  offset：如果第一位参数传的是路径，那么 offset=1，代表 arguments 从 1 之后的才是中间件函数
+  //          否则，offset=0
+  // flatten 的作用是扁平化数组
+  // app.use('/', (req, res, next) => {}, (req, res, next) => {}, ...)
   var fns = flatten(slice.call(arguments, offset));
 
+  // fns 长度为 0，说明没有传入中间件函数，报错
   if (fns.length === 0) {
     throw new TypeError('app.use() requires a middleware function')
   }
 
   // setup router
+  // 主要就是通过 new Router 创建了 Router 实例挂载到 app._router 上
   this.lazyrouter();
+  // 从 app._router 上取出 Router 实例
   var router = this._router;
 
+  // 遍历中间件函数数组
   fns.forEach(function (fn) {
     // non-express app
+    // 从这里可以看出，实际上 app.use 是调用 router.use 进行中间件注册
+    // 第一次的时候，中间件的回调函数一般都没有 handle 和 set，即 fn.handle 和 fn.set 为 undefined
     if (!fn || !fn.handle || !fn.set) {
       return router.use(path, fn);
     }
@@ -238,6 +260,7 @@ app.use = function use(fn) {
     fn.emit('mount', this);
   }, this);
 
+  // this 就是 app 函数对象，将 this 返回使得支持链式调用
   return this;
 };
 
@@ -612,9 +635,13 @@ app.render = function render(name, options, callback) {
  * @return {http.Server}
  * @public
  */
-
+// 定义 app 函数对象上的 listen 方法
+// 实际上还是通过 Node 的 http 模块开启服务
 app.listen = function listen() {
+  // 通过 Node 的 http.createServer 创建一个服务
+  // 这里的 this 就是 app 函数对象本身
   var server = http.createServer(this);
+  // 开启这个服务
   return server.listen.apply(server, arguments);
 };
 
