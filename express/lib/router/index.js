@@ -227,11 +227,15 @@ proto.handle = function handle(req, res, out) {
     var route;
 
     // 找到匹配的中间件 layer，当 match=true 代表找到匹配的
+    // 会判断请求路径、请求类型[post、get、...]
     while (match !== true && idx < stack.length) {
       // 取出 stack 数组中 idx 下标对应的 layer 实例
       // idx++：当前是 0，那么 会取到 stack[0]，执行完 stack[0]，idx 加 1
       layer = stack[idx++];
+
+      // 判断请求路径是否一致
       match = matchLayer(layer, path);
+
       route = layer.route;
 
       if (typeof match !== 'boolean') {
@@ -254,6 +258,7 @@ proto.handle = function handle(req, res, out) {
         continue;
       }
 
+      // 获取请求类型，判断请求类型是否一致
       var method = req.method;
       var has_method = route._handles_method(method);
 
@@ -262,7 +267,7 @@ proto.handle = function handle(req, res, out) {
         appendMethods(options, route._options());
       }
 
-      // don't even bother matching route
+      // 请求类型不一致，match 置为 false
       if (!has_method && method !== 'HEAD') {
         match = false;
         continue;

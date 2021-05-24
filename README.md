@@ -729,11 +729,15 @@ proto.handle = function handle(req, res, out) {
     var route;
       
     // 找到匹配的中间件 layer，当 match=true 代表找到匹配的
+    // 会判断请求路径、请求类型[post、get、...]
     while (match !== true && idx < stack.length) {
       // 取出 stack 数组中 idx 下标对应的 layer 实例
       // idx++：当前是 0，那么 会取到 stack[0]，执行完 stack[0]，idx 加 1
       layer = stack[idx++];
+
+      // 判断请求路径是否一致
       match = matchLayer(layer, path);
+
       route = layer.route;
 
       if (typeof match !== 'boolean') {
@@ -755,8 +759,21 @@ proto.handle = function handle(req, res, out) {
         match = false;
         continue;
       }
-        
-      // ..
+
+      // 获取请求类型，判断请求类型是否一致
+      var method = req.method;
+      var has_method = route._handles_method(method);
+
+      // build up automatic options response
+      if (!has_method && method === 'OPTIONS') {
+        appendMethods(options, route._options());
+      }
+
+      // 请求类型不一致，match 置为 false
+      if (!has_method && method !== 'HEAD') {
+        match = false;
+        continue;
+      }
     }
       
     // 没找到匹配的中间件，结束
@@ -796,13 +813,13 @@ next 的主要逻辑：
 
 - 通过 while 循环从 stack 数组中找到第一个匹配的 `中间件layer`
 
-  - 中间件需要匹配上才能使用
+  - 中间件需要 `路径` 和 `请求类型` 都匹配上
 
     ```js
     app.use('/info', middleWare)
+    
+    app.get('/info', middleWare)
     ```
-
-    这个中间件 middleWare 必须是路径 `/info` 才会被匹配
 
 - 执行这个 `中间件layer` 的 handle_request
 
@@ -849,6 +866,12 @@ Layer.prototype.handle_request = function handle(req, res, next) {
 ### 6.5、总结
 
 中间件的触发，主要就是外部访问，从存储所有`中间件layer` 的 stack 数组中找到匹配的 `中间件layer`，执行 `layer.handle_request`，实际上就是执行 layer.handle，而以前就是把中间件函数挂载在 layer.handle 上的，所以实际就是执行中间件函数，并且会把 next 当做参数传进去，当使用的时候调用了 next，继续去 stack 数组中查找下一个匹配的`中间件layer`
+
+
+
+**基本流程就是：**
+
+![](/imgs/img1.png)
 
 
 
