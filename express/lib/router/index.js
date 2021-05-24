@@ -145,7 +145,7 @@ proto.handle = function handle(req, res, out) {
 
   debug('dispatching %s %s', req.method, req.url);
 
-  var idx = 0;
+  var idx = 0; // 记录当前查找的中间件layer 在 stack 中索引
   var protohost = getProtohost(req.url) || ''
   var removed = '';
   var slashAdded = false;
@@ -157,7 +157,7 @@ proto.handle = function handle(req, res, out) {
 
   // middleware and routes
   // 拿到 router 中存放 layer 实例的数组
-  // layer 中存放了中间件函数
+  // layer.handle 上挂载了中间件函数
   var stack = self.stack;
 
   // manage inter-router variables
@@ -180,7 +180,7 @@ proto.handle = function handle(req, res, out) {
   req.baseUrl = parentUrl;
   req.originalUrl = req.originalUrl || req.url;
 
-  // 执行 next 函数，也就死说，执行 router.handle 的时候，会自动调用 next
+  // 执行 next 函数，也就是说，执行 router.handle 的时候，会自动调用一次 next 函数
   next();
 
   // 定义了 next 函数
@@ -226,7 +226,10 @@ proto.handle = function handle(req, res, out) {
     var match;
     var route;
 
+    // 找到匹配的中间件 layer，当 match=true 代表找到匹配的
     while (match !== true && idx < stack.length) {
+      // 取出 stack 数组中 idx 下标对应的 layer 实例
+      // idx++：当前是 0，那么 会取到 stack[0]，执行完 stack[0]，idx 加 1
       layer = stack[idx++];
       match = matchLayer(layer, path);
       route = layer.route;
@@ -267,6 +270,7 @@ proto.handle = function handle(req, res, out) {
     }
 
     // no match
+    // 没找到匹配的中间件，结束
     if (match !== true) {
       return done(layerError);
     }
@@ -289,9 +293,11 @@ proto.handle = function handle(req, res, out) {
       }
 
       if (route) {
+        // 执行 layer.handle_request
         return layer.handle_request(req, res, next);
       }
-
+      
+      // 这里面的主要逻辑其实也是执行 layer.handle_request
       trim_prefix(layer, layerError, layerPath, path);
     });
   }

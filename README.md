@@ -555,6 +555,10 @@ router.use 最主要的就是：
 
 ## 6、中间件函数调用时机
 
+中间件调用的时机，也就是请求被处理的阶段，基本流程如下：
+
+
+
 ### 6.1、外部访问服务，触发 http.createServer 的回调
 
 在 Node 中：
@@ -640,5 +644,217 @@ app.handle 的核心是执行 router.handle 函数
 > express\lib\router\index.js
 
 ```js
+// 定义 router.handle
+proto.handle = function handle(req, res, out) {
+  // 将 router 实例保存在 self 上
+  var self = this;
+
+  debug('dispatching %s %s', req.method, req.url);
+
+  var idx = 0; // 索引
+  var protohost = getProtohost(req.url) || ''
+  var removed = '';
+  var slashAdded = false;
+  var paramcalled = {};
+
+  // store options for OPTIONS request
+  // only used if OPTIONS request
+  var options = [];
+
+  // middleware and routes
+  // 拿到 router 中存放 layer 实例的数组
+  // layer.handle 上挂载了中间件函数
+  var stack = self.stack;
+
+  // manage inter-router variables
+  var parentParams = req.params;
+  var parentUrl = req.baseUrl || '';
+  var done = restore(out, req, 'baseUrl', 'next', 'params');
+
+  // setup next layer
+  req.next = next;
+
+  // for options requests, respond with a default if nothing else responds
+  if (req.method === 'OPTIONS') {
+    done = wrap(done, function(old, err) {
+      if (err || options.length === 0) return old(err);
+      sendOptionsResponse(res, options, old);
+    });
+  }
+
+  // setup basic req values
+  req.baseUrl = parentUrl;
+  req.originalUrl = req.originalUrl || req.url;
+
+  // 执行 next 函数，也就是说，执行 router.handle 的时候，会自动调用 next
+  next();
+
+  function next() {/.../}
+
+  function trim_prefix() {/.../}
+}
 ```
+
+router.handle 中主要的逻辑就是调用了一次 next 函数，也就是说，当外部访问的时候，会触发：
+
+app --> app.handle --> router.handle --> next
+
+下面再来看看 next 函数：
+
+> express\lib\router\index.js
+
+```js
+// 定义 router.handle
+proto.handle = function handle(req, res, out) {
+  // 将 router 实例保存在 self 上
+  var self = this;
+  // ...
+
+  var idx = 0; // 记录当前查找的中间件layer 在 stack 中索引
+  // ...
+
+  // 拿到 router 中存放 layer 实例的数组
+  // layer.handle 上挂载了中间件函数
+  var stack = self.stack;
+  
+  // ...
+
+  // 执行 next 函数，也就是说，执行 router.handle 的时候，会自动调用 next
+  next();
+
+  function next() {
+    // ...
+    var layer;
+    var match;
+    var route;
+      
+    // 找到匹配的中间件 layer，当 match=true 代表找到匹配的
+    while (match !== true && idx < stack.length) {
+      // 取出 stack 数组中 idx 下标对应的 layer 实例
+      // idx++：当前是 0，那么 会取到 stack[0]，执行完 stack[0]，idx 加 1
+      layer = stack[idx++];
+      match = matchLayer(layer, path);
+      route = layer.route;
+
+      if (typeof match !== 'boolean') {
+        // hold on to layerError
+        layerError = layerError || match;
+      }
+
+      if (match !== true) {
+        continue;
+      }
+
+      if (!route) {
+        // process non-route handlers normally
+        continue;
+      }
+
+      if (layerError) {
+        // routes do not match with a pending error
+        match = false;
+        continue;
+      }
+        
+      // ..
+    }
+      
+    // 没找到匹配的中间件，结束
+    if (match !== true) {
+      return done(layerError);
+    }
+      
+    // this should be done for the layer
+    self.process_params(layer, paramcalled, req, res, function (err) {
+      if (err) {
+        return next(layerError || err);
+      }
+
+      if (route) {
+        // 执行 layer.handle_request
+        return layer.handle_request(req, res, next);
+      }
+      
+      // 这里面的主要逻辑其实也是执行 layer.handle_request
+      trim_prefix(layer, layerError, layerPath, path);
+    });
+  }
+
+  function trim_prefix() {
+    // ...
+
+    if (layerError) {
+      layer.handle_error(layerError, req, res, next);
+    } else {
+      layer.handle_request(req, res, next);
+    }
+  }
+}
+```
+
+next 的主要逻辑：
+
+- 通过 while 循环从 stack 数组中找到第一个匹配的 `中间件layer`
+
+  - 中间件需要匹配上才能使用
+
+    ```js
+    app.use('/info', middleWare)
+    ```
+
+    这个中间件 middleWare 必须是路径 `/info` 才会被匹配
+
+- 执行这个 `中间件layer` 的 handle_request
+
+
+
+### 6.4、layer.handle_request
+
+> express\lib\router\layer.js
+
+```js
+function Layer(path, options, fn) {
+  // ...
+
+  // 将 new Layer 传进来的中间件函数 fn 挂载到 Layer.handle
+  this.handle = fn;
+    
+  // ...
+}
+
+Layer.prototype.handle_request = function handle(req, res, next) {
+  var fn = this.handle;
+    
+  // ...
+
+  try {
+    fn(req, res, next);
+  } catch (err) {
+    next(err);
+  }
+};
+```
+
+可以发现，Layer.handle_request 的主要逻辑就是将之前挂载在 layer.handle 上的中间件函数拿来执行 `fn(req, res, next)`，并且将参数 req, res, next 传进去
+
+那么当我们在使用中间件的时候：
+
+- 如果调用了 next，那么会继续从 stack 数组中寻找下一个符合条件的`中间件layer`。（因为之前的 idx 已经改变，所以会从下一个索引位置开始查找）
+- 如果没有调用 next，那么会停止，不会继续查找下一个中间件
+
+这也是为什么，写了一堆中间件，条件都符合，如果没有执行 next，那么永远只会执行第一个中间件
+
+
+
+### 6.5、总结
+
+中间件的触发，主要就是外部访问，从存储所有`中间件layer` 的 stack 数组中找到匹配的 `中间件layer`，执行 `layer.handle_request`，实际上就是执行 layer.handle，而以前就是把中间件函数挂载在 layer.handle 上的，所以实际就是执行中间件函数，并且会把 next 当做参数传进去，当使用的时候调用了 next，继续去 stack 数组中查找下一个匹配的`中间件layer`
+
+
+
+## 附录
+
+参考文章：
+
+[三步法解析Express源码](https://juejin.cn/post/6884575671721394189)
 
