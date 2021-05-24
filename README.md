@@ -852,6 +852,49 @@ Layer.prototype.handle_request = function handle(req, res, next) {
 
 
 
+## 7、Express 内置中间件
+
+> express\lib\express.js
+
+```js
+var bodyParser = require('body-parser')
+
+exports = module.exports = createApplication;
+
+// 上面有 exports = module.exports = createApplication
+// 所以往 exports 上加东西实际上就是往 createApplication 中加东西
+// 暴露一些内置的 express 中间件
+// 使用 body-parser 库的 json 处理 body 是 application/json 格式的
+exports.json = bodyParser.json
+// 处理 url 的 query 参数，例如： http://127.0.0.1:9000/info?name=jack
+exports.query = require('./middleware/query');
+// 使用 body-parser 库的 raw 处理 body 是 raw 格式
+exports.raw = bodyParser.raw
+// 使用 serve-static 库作为 express 开启静态资源服务器的能力
+exports.static = require('serve-static');
+// 使用 body-parser 库的 text 处理 body 是 tetx 格式
+exports.text = bodyParser.text
+// 使用 body-parser 库的 urlencoded 处理 body 是 x-www-form-urlencoded 格式
+exports.urlencoded = bodyParser.urlencoded
+```
+
+Express 内置了一些中间件的功能，例如解析 body 参数为 application/json、x-www-form-urlencoded
+
+可以直接使用：
+
+```ks
+const express = require('express')
+
+const app = express()
+
+app.use(express.json())
+app.use(express.urlencoded())
+```
+
+其实，上面那两个，express 内部还是依赖于 body-parse 的
+
+
+
 ## 附录
 
 参考文章：
