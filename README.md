@@ -130,9 +130,23 @@ function createApplication() {
 createApplication 做的事：
 
 - 定义了一个 app 函数
+
 - 通过 mixin 往 app 函数对象上混入一系列方法
+
 - 将 Node 的 http 模块的 request、response 实例分别挂在到 app.request 和 app.response 上
+
 - 调用在 mixin 阶段混入的 app.init 进行初始化
+
+  ```js
+  app.init = function init() {
+    this.cache = {};
+    this.engines = {};
+    this.settings = {};
+  
+    this.defaultConfiguration();
+  };
+  ```
+
 - 将 app 函数对象返回
 
 
@@ -841,7 +855,7 @@ function Layer(path, options, fn) {
 
 Layer.prototype.handle_request = function handle(req, res, next) {
   var fn = this.handle;
-    
+
   // ...
 
   try {
