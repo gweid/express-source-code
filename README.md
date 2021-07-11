@@ -743,6 +743,7 @@ proto.handle = function handle(req, res, out) {
     var route;
       
     // 找到匹配的中间件 layer，当 match=true 代表找到匹配的
+    // 如果找到，match=true，就跳出 while 循环（match !== true 才继续循环），所以需要调用 next 再次进入
     // 会判断请求路径、请求类型[post、get、...]
     while (match !== true && idx < stack.length) {
       // 取出 stack 数组中 idx 下标对应的 layer 实例
@@ -789,12 +790,12 @@ proto.handle = function handle(req, res, out) {
         continue;
       }
     }
-      
+
     // 没找到匹配的中间件，结束
     if (match !== true) {
       return done(layerError);
     }
-      
+
     // this should be done for the layer
     self.process_params(layer, paramcalled, req, res, function (err) {
       if (err) {
@@ -885,7 +886,7 @@ Layer.prototype.handle_request = function handle(req, res, next) {
 
 **基本流程就是：**
 
-![](/imgs/img1.png)
+ <img src="/imgs/img1.png" style="zoom: 50%;" />
 
 
 
